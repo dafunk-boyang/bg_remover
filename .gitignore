@@ -26,3 +26,6 @@ Thumbs.db
 
 # Output images
 BackgroundRemoved/
+
+# HPLC dashboard database
+hplc_dashboard/*.db

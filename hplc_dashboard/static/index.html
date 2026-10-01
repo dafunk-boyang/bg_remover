@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HPLC Availability</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%232463d6%22/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1d2330; --muted: #677085; --border: #dde1e8;
+    --free: #1f9d55; --free-bg: #e3f6ea;
+    --running: #2463d6; --running-bg: #e4ecfb;
+    --done: #c27803; --done-bg: #fdf1dc;
+    --maint: #7a8294; --maint-bg: #eceef2;
+    --danger: #c53030;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --text: #e7eaf0; --muted: #98a1b3; --border: #2c3340;
+      --free: #46c97c; --free-bg: #173324;
+      --running: #6b9cff; --running-bg: #1a2742;
+      --done: #f0a93b; --done-bg: #3a2c14;
+      --maint: #98a1b3; --maint-bg: #262c37;
+      --danger: #f07070;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 16px 24px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  h1 { font-size: 20px; margin: 0; }
+  #clock { color: var(--muted); font-variant-numeric: tabular-nums; }
+  nav button { margin-left: 4px; }
+  main { padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--running); border-color: var(--running); color: #fff; }
+  button.danger { color: var(--danger); }
+  button.active { background: var(--text); color: var(--panel); }
+
+  .summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; min-width: 120px; }
+  .stat b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .stat.next { flex: 1; min-width: 220px; }
+  .stat.next b { font-size: 18px; padding-top: 6px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-left: 6px solid var(--c);
+          border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .card.free { --c: var(--free); } .card.running { --c: var(--running); }
+  .card.done { --c: var(--done); } .card.maintenance { --c: var(--maint); }
+  .card-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+  .card h2 { font-size: 18px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .pill { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+          padding: 3px 8px; border-radius: 999px; color: var(--c); white-space: nowrap;
+          background: color-mix(in srgb, var(--c) 15%, transparent); }
+  .run-row { display: flex; align-items: center; gap: 12px; }
+  .initials { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; flex: none;
+              font-weight: 700; font-size: 16px; color: #fff; background: var(--c); }
+  .countdown { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--c); transition: width 1s linear; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .notes { font-size: 13px; color: var(--muted); font-style: italic; }
+
+  body.kiosk .actions, body.kiosk nav, body.kiosk .admin { display: none !important; }
+  body.kiosk .countdown { font-size: 38px; }
+
+  dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text);
+           padding: 20px 22px; width: min(420px, 92vw); }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
+  dialog h3 { margin: 0 0 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, textarea, select { font: inherit; width: 100%; padding: 7px 9px; border-radius: 6px;
+           border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  .row { display: flex; gap: 10px; } .row > div { flex: 1; }
+  .tabs { display: flex; gap: 4px; margin-top: 12px; }
+  .tabs button { flex: 1; }
+  .total { margin-top: 12px; font-weight: 600; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .error { color: var(--danger); font-size: 13px; min-height: 1em; margin-top: 8px; }
+  .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; }
+  .check input { width: auto; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .util-bar { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; min-width: 120px; }
+  .util-bar > div { height: 100%; background: var(--running); }
+  section h2 { font-size: 16px; margin: 24px 0 10px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  @media (max-width: 600px) { header, main { padding-left: 16px; padding-right: 16px; } .table-wrap { overflow-x: auto; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>HPLC Availability</h1>
+    <div id="clock"></div>
+  </div>
+  <nav>
+    <button data-view="board" class="active">Board</button>
+    <button data-view="usage">Utilization</button>
+    <button id="add-system" class="admin">+ Add system</button>
+  </nav>
+</header>
+
+<main>
+  <div id="board">
+    <div class="summary" id="summary"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div id="usage" hidden>
+    <div class="toolbar">
+      <span>Window:</span>
+      <select id="days" style="width:auto">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+    </div>
+    <div class="table-wrap"><table id="util"></table></div>
+    <section><h2>Recent runs</h2><div class="table-wrap"><table id="runs"></table></div></section>
+  </div>
+</main>
+
+<dialog id="run-dlg">
+  <form method="dialog" id="run-form">
+    <h3>Start run on <span id="run-system"></span></h3>
+    <label for="analyst">Analyst initials</label>
+    <input id="analyst" maxlength="4" required autocomplete="off" style="text-transform:uppercase" placeholder="EJB">
+    <label for="desc">Method / sample set (optional)</label>
+    <input id="desc" maxlength="200" placeholder="e.g. Assay lot 2410-07">
+    <div class="tabs">
+      <button type="button" data-mode="seq" class="active">Sequence</button>
+      <button type="button" data-mode="total">Total time</button>
+    </div>
+    <div id="mode-seq">
+      <div class="row">
+        <div><label for="inj">Injections</label><input id="inj" type="number" min="1" value="10"></div>
+        <div><label for="per">Min / injection</label><input id="per" type="number" min="0" step="0.1" value="15"></div>
+      </div>
+      <label for="equil">Equilibration / wash (min)</label>
+      <input id="equil" type="number" min="0" value="30">
+    </div>
+    <div id="mode-total" hidden>
+      <div class="row">
+        <div><label for="hrs">Hours</label><input id="hrs" type="number" min="0" value="2"></div>
+        <div><label for="mins">Minutes</label><input id="mins" type="number" min="0" max="59" value="0"></div>
+      </div>
+    </div>
+    <div class="total" id="run-total"></div>
+    <div class="error" id="run-err"></div>
+    <div class="dlg-actions">
+      <button type="button" data-close>Cancel</button>
+      <button class="primary">Start run</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="extend-dlg">
+  <form method="dialog" id="extend-form">
+    <h3>Extend run</h3>
+    <label for="ext">Add minutes</label>
+    <input id="ext" type="number" min="1" value="30" required>
+    <div class="error" id="ext-err"></div>
+    <div class="dlg-actions">
+      <button type="button" data-close>Cancel</button>
+      <button class="primary">Extend</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="sys-dlg">
+  <form method="dialog" id="sys-form">
+    <h3 id="sys-title">Add system</h3>
+    <label for="s-name">Name</label>
+    <input id="s-name" maxlength="60" required placeholder="e.g. HPLC-03">
+    <div class="row">
+      <div><label for="s-model">Model</label><input id="s-model" maxlength="100" placeholder="e.g. Agilent 1260"></div>
+      <div><label for="s-loc">Location</label><input id="s-loc" maxlength="100" placeholder="e.g. Lab 2B"></div>
+    </div>
+    <label for="s-notes">Notes (column, detector, etc.)</label>
+    <textarea id="s-notes" maxlength="500" rows="2"></textarea>
+    <label class="check"><input type="checkbox" id="s-oos"> Out of service / maintenance</label>
+    <div class="error" id="sys-err"></div>
+    <div class="dlg-actions">
+      <button type="button" class="danger" id="s-delete" hidden>Delete</button>
+      <span style="flex:1"></span>
+      <button type="button" data-close>Cancel</button>
+      <button class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LABELS = { free: "Available", running: "Running", done: "Run complete", maintenance: "Out of service" };
+const ORDER = { done: 0, free: 1, running: 2, maintenance: 3 };
+
+let state = { systems: [] };
+let skew = 0;           // server clock minus browser clock, in seconds
+let current = null;     // system/run being edited in a dialog
+const serverNow = () => Date.now() / 1000 + skew;
+
+if (new URLSearchParams(location.search).has("kiosk")) document.body.classList.add("kiosk");
+
+async function api(method, url, body) {
+  const res = await fetch(url, {
+    method, headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function refresh() {
+  try {
+    const t0 = Date.now();
+    state = await api("GET", "/api/state");
+    skew = state.now - (t0 + Date.now()) / 2000;
+    render();
+  } catch (e) { console.error(e); }
+}
+
+function fmtDuration(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600),
+        m = Math.floor(sec % 3600 / 60), s = sec % 60, p = (n) => String(n).padStart(2, "0");
+  return d ? `${d}d ${p(h)}:${p(m)}:${p(s)}` : `${p(h)}:${p(m)}:${p(s)}`;
+}
+function fmtShort(sec) {
+  const m = Math.max(1, Math.round(sec / 60));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+function fmtTime(ts) {
+  const d = new Date((ts - skew) * 1000), today = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === today.toDateString() ? time : `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ${time}`;
+}
+
+function render() {
+  const systems = [...state.systems].sort((a, b) =>
+    ORDER[a.status] - ORDER[b.status] || (a.run?.ends_at ?? 0) - (b.run?.ends_at ?? 0) || a.name.localeCompare(b.name));
+  const count = (st) => systems.filter((s) => s.status === st).length;
+
+  $("#grid").innerHTML = systems.length ? systems.map(card).join("") :
+    `<div class="empty" style="grid-column:1/-1">No HPLC systems yet. Click <b>+ Add system</b> to register your instruments.</div>`;
+
+  const running = systems.filter((s) => s.status === "running");
+  const next = running[0];
+  const done = count("done");
+  $("#summary").innerHTML = `
+    <div class="stat"><b style="color:var(--free)">${count("free")}</b><span>Available</span></div>
+    <div class="stat"><b style="color:var(--running)">${running.length}</b><span>Running</span></div>
+    <div class="stat"><b style="color:var(--done)">${done}</b><span>Done, not released</span></div>
+    <div class="stat"><b style="color:var(--maint)">${count("maintenance")}</b><span>Out of service</span></div>
+    <div class="stat next"><span>Next to free up</span><b id="next-free">${next
+      ? `${esc(next.name)} · ${fmtTime(next.run.ends_at)}` : "—"}</b></div>`;
+  tick();
+}
+
+function card(s) {
+  const r = s.run;
+  let body = "";
+  if (r) {
+    body = `
+      <div class="run-row">
+        <div class="initials" title="Analyst">${esc(r.analyst)}</div>
+        <div>
+          <div class="countdown" data-ends="${r.ends_at}" data-start="${r.started_at}"></div>
+          <div class="sub">${s.status === "done" ? "Finished" : "Ends"} ${fmtTime(r.ends_at)}</div>
+        </div>
+      </div>
+      <div class="bar"><div data-bar style="width:0"></div></div>
+      ${r.description ? `<div class="sub">${esc(r.description)}</div>` : ""}`;
+  }
+  const actions = s.status === "free"
+    ? `<button class="primary" data-act="start" data-id="${s.id}">Start run</button>`
+    : r ? `<button data-act="extend" data-run="${r.id}">Extend</button>
+           <button data-act="finish" data-run="${r.id}">${s.status === "done" ? "Release" : "End early"}</button>`
+    : "";
+  return `
+    <div class="card ${s.status}">
+      <div class="card-head">
+        <div><h2>${esc(s.name)}</h2><div class="sub">${esc([s.model, s.location].filter(Boolean).join(" · "))}</div></div>
+        <span class="pill">${LABELS[s.status]}</span>
+      </div>
+      ${body}
+      ${s.notes ? `<div class="notes">${esc(s.notes)}</div>` : ""}
+      <div class="actions">${actions}<span style="flex:1"></span><button data-act="edit" data-id="${s.id}" title="Edit system">Edit</button></div>
+    </div>`;
+}
+
+function tick() {
+  const now = serverNow();
+  $("#clock").textContent = new Date().toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit", second: "2-digit" });
+  let elapsedNow = false;
+  document.querySelectorAll(".countdown").forEach((el) => {
+    const ends = +el.dataset.ends, start = +el.dataset.start, left = ends - now;
+    el.textContent = left > 0 ? fmtDuration(left) : `+${fmtDuration(-left)}`;
+    el.title = left > 0 ? "Time remaining" : "Time since run completed";
+    const bar = el.closest(".card").querySelector("[data-bar]");
+    if (bar) bar.style.width = `${Math.min(100, 100 * (now - start) / (ends - start))}%`;
+    if (left <= 0 && el.closest(".card").classList.contains("running")) elapsedNow = true;
+  });
+  if (elapsedNow) refresh();  // flip the card to "Run complete" right away
+}
+
+// ---- start run dialog ----
+let mode = "seq";
+function runMinutes() {
+  if (mode === "seq") return (+$("#inj").value || 0) * (+$("#per").value || 0) + (+$("#equil").value || 0);
+  return (+$("#hrs").value || 0) * 60 + (+$("#mins").value || 0);
+}
+function updateTotal() {
+  const m = runMinutes();
+  $("#run-total").textContent = m > 0
+    ? `Total ${fmtShort(m * 60)} — done around ${fmtTime(serverNow() + m * 60)}` : "";
+}
+document.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("active", x === b));
+  $("#mode-seq").hidden = mode !== "seq"; $("#mode-total").hidden = mode !== "total";
+  updateTotal();
+});
+$("#run-form").addEventListener("input", updateTotal);
+$("#run-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("POST", `/api/systems/${current.id}/runs`, {
+      analyst: $("#analyst").value, description: $("#desc").value, duration_minutes: runMinutes() });
+    try { localStorage.setItem("hplc-initials", $("#analyst").value.toUpperCase()); } catch {}
+    $("#run-dlg").close(); refresh();
+  } catch (err) { $("#run-err").textContent = err.message; }
+};
+
+// ---- extend dialog ----
+$("#extend-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("POST", `/api/runs/${current}/extend`, { minutes: +$("#ext").value });
+    $("#extend-dlg").close(); refresh();
+  } catch (err) { $("#ext-err").textContent = err.message; }
+};
+
+// ---- system dialog ----
+function openSystem(s) {
+  current = s;
+  $("#sys-title").textContent = s ? `Edit ${s.name}` : "Add system";
+  $("#s-name").value = s?.name ?? ""; $("#s-model").value = s?.model ?? "";
+  $("#s-loc").value = s?.location ?? ""; $("#s-notes").value = s?.notes ?? "";
+  $("#s-oos").checked = s?.status === "maintenance";
+  $("#s-delete").hidden = !s; $("#sys-err").textContent = "";
+  $("#sys-dlg").showModal();
+}
+$("#sys-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = { name: $("#s-name").value, model: $("#s-model").value, location: $("#s-loc").value,
+                 notes: $("#s-notes").value, out_of_service: $("#s-oos").checked };
+  try {
+    if (current) await api("PATCH", `/api/systems/${current.id}`, body);
+    else { const { id } = await api("POST", "/api/systems", body);
+           if (body.out_of_service) await api("PATCH", `/api/systems/${id}`, { out_of_service: true }); }
+    $("#sys-dlg").close(); refresh();
+  } catch (err) { $("#sys-err").textContent = err.message; }
+};
+$("#s-delete").onclick = async () => {
+  if (!confirm(`Delete ${current.name} and all of its run history?`)) return;
+  try { await api("DELETE", `/api/systems/${current.id}`); $("#sys-dlg").close(); refresh(); }
+  catch (err) { $("#sys-err").textContent = err.message; }
+};
+$("#add-system").onclick = () => openSystem(null);
+document.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => b.closest("dialog").close());
+
+// ---- card buttons ----
+$("#grid").onclick = async (e) => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const sys = state.systems.find((s) => s.id === +b.dataset.id);
+  if (b.dataset.act === "start") {
+    current = sys;
+    $("#run-system").textContent = sys.name;
+    try { $("#analyst").value = localStorage.getItem("hplc-initials") || ""; } catch {}
+    $("#desc").value = ""; $("#run-err").textContent = "";
+    updateTotal(); $("#run-dlg").showModal();
+  } else if (b.dataset.act === "extend") {
+    current = b.dataset.run; $("#ext-err").textContent = ""; $("#extend-dlg").showModal();
+  } else if (b.dataset.act === "finish") {
+    const label = b.textContent.trim();
+    if (label === "End early" && !confirm("End this run now and mark the system available?")) return;
+    try { await api("POST", `/api/runs/${b.dataset.run}/finish`); refresh(); } catch (err) { alert(err.message); }
+  } else if (b.dataset.act === "edit") {
+    openSystem(sys);
+  }
+};
+
+// ---- utilization view ----
+async function loadUsage() {
+  const data = await api("GET", `/api/history?days=${$("#days").value}`);
+  $("#util").innerHTML = `<tr><th>System</th><th>Utilization</th><th></th><th>Instrument hours</th><th>Runs</th></tr>` +
+    (data.utilization.map((u) => `<tr><td>${esc(u.name)}</td>
+      <td style="width:40%"><div class="util-bar"><div style="width:${Math.min(100, u.percent)}%"></div></div></td>
+      <td>${u.percent}%</td><td>${u.busy_hours}</td><td>${u.runs}</td></tr>`).join("") ||
+      `<tr><td colspan="5" class="sub">No systems yet.</td></tr>`);
+  $("#runs").innerHTML = `<tr><th>System</th><th>Analyst</th><th>Description</th><th>Started</th><th>Planned</th><th>Released</th></tr>` +
+    (data.runs.map((r) => `<tr><td>${esc(r.system_name)}</td><td>${esc(r.analyst)}</td><td>${esc(r.description)}</td>
+      <td>${fmtTime(r.started_at)}</td><td>${fmtShort(r.ends_at - r.started_at)}</td>
+      <td>${r.finished_at ? fmtTime(r.finished_at) : "<i>in progress</i>"}</td></tr>`).join("") ||
+      `<tr><td colspan="6" class="sub">No runs in this window.</td></tr>`);
+}
+$("#days").onchange = loadUsage;
+document.querySelectorAll("[data-view]").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("active", x === b));
+  $("#board").hidden = b.dataset.view !== "board"; $("#usage").hidden = b.dataset.view !== "usage";
+  if (b.dataset.view === "usage") loadUsage();
+});
+
+refresh();
+setInterval(tick, 1000);
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>
